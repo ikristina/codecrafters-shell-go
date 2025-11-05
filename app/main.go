@@ -14,5 +14,5 @@ func main() {
 		fmt.Println("error capturing the command.")
 		return
 	}
-	fmt.Fprintf(os.Stdout, "%s: command not found", command)
+	fmt.Println(command[len(command)-1], ": command not found")
 }

@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
+
+var PATH = os.Getenv("PATH")
 
 var builtins = map[string]struct{}{
 	"type": {},
@@ -26,8 +29,6 @@ func main() {
 		command = command[:len(command)-1]
 		if err = parseCommand(command); err != nil {
 			fmt.Println(err)
-			continue
-		} else {
 			continue
 		}
 	}
@@ -55,8 +56,13 @@ func parseCommand(command string) error {
 		return nil
 	case "type":
 		v := args[0]
+		path := isInThePath(v)
+		// fmt.Println("DEBUG: v", v)
 		if _, ok := builtins[v]; ok {
 			fmt.Printf("%s is a shell builtin\n", v)
+			return nil
+		} else if path != "" {
+			fmt.Printf("%s is %s\n", v, path)
 			return nil
 		} else {
 			fmt.Printf("%s: not found\n", v)
@@ -64,4 +70,19 @@ func parseCommand(command string) error {
 		}
 	}
 	return fmt.Errorf("%s: command not found", command)
+}
+
+func isInThePath(s string) string { // return path of the command
+	paths := filepath.SplitList(PATH)
+	for _, path := range paths {
+		// fmt.Println("DEBUG", path)
+		_, err := os.Stat(path + "/" + s)
+		if err == nil {
+			return path
+		}
+		if os.IsNotExist(err) {
+			continue
+		}
+	}
+	return ""
 }

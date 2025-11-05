@@ -18,20 +18,37 @@ func main() {
 			return
 		}
 		command = command[:len(command)-1]
-		mainCommand := ""
-		var args []string
-		if len(command) != 0 {
-			args = strings.Split(command, " ")
-			mainCommand = args[0]
-			args = args[1:]
-		}
-		if mainCommand == "exit" {
-			v, err := strconv.Atoi(args[0])
-			if err != nil {
-				fmt.Println("incorrect command arguments: ", command)
-			}
-			os.Exit(v)
+		if err = parseCommand(command); err != nil {
+			fmt.Println(err)
+			continue
+		} else {
+			continue
 		}
 		fmt.Println(command + ": command not found")
 	}
+}
+
+func parseCommand(command string) error {
+	mainCommand := ""
+	var args []string
+	if len(command) != 0 {
+		args = strings.Split(command, " ")
+		if len(args) >= 2 {
+			mainCommand = args[0]
+			args = args[1:]
+		}
+	}
+	if mainCommand == "exit" {
+		v, err := strconv.Atoi(args[0])
+		if err != nil {
+			return fmt.Errorf("incorrect command arguments: %s", command)
+		}
+		fmt.Printf("exit with status %d\n", v)
+		os.Exit(v)
+	}
+	if mainCommand == "echo" {
+		fmt.Println(strings.TrimSpace(command[4:]))
+		return nil
+	}
+	return fmt.Errorf("incorrect command: %s", command)
 }

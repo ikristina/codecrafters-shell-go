@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+var builtins = map[string]struct{}{
+	"type": {},
+	"echo": {},
+	"exit": {},
+}
+
 func main() {
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
@@ -37,16 +43,22 @@ func parseCommand(command string) error {
 			args = args[1:]
 		}
 	}
-	if mainCommand == "exit" {
+	switch mainCommand {
+	case "exit":
 		v, err := strconv.Atoi(args[0])
 		if err != nil {
 			return fmt.Errorf("incorrect command arguments: %s", command)
 		}
 		os.Exit(v)
-	}
-	if mainCommand == "echo" {
+	case "echo":
 		fmt.Println(strings.TrimSpace(command[4:]))
 		return nil
+	case "type":
+		v := args[0]
+		if _, ok := builtins[v]; ok {
+			fmt.Printf("%s: is a shell builtin.\n", v)
+			return nil
+		}
 	}
 	return fmt.Errorf("%s: command not found", command)
 }

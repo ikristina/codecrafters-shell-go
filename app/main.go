@@ -24,7 +24,6 @@ func main() {
 		} else {
 			continue
 		}
-		fmt.Println(command + ": command not found")
 	}
 }
 
@@ -50,5 +49,5 @@ func parseCommand(command string) error {
 		fmt.Println(strings.TrimSpace(command[4:]))
 		return nil
 	}
-	return fmt.Errorf("incorrect command: %s", command)
+	return fmt.Errorf("%s: command not found", command)
 }

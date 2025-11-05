@@ -56,7 +56,7 @@ func parseCommand(command string) error {
 	case "type":
 		v := args[0]
 		if _, ok := builtins[v]; ok {
-			fmt.Printf("%s is a shell builtin.\n", v)
+			fmt.Printf("%s is a shell builtin\n", v)
 			return nil
 		}
 	}

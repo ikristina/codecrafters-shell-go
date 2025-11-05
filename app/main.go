@@ -60,6 +60,7 @@ func parseCommand(command string) error {
 			return nil
 		} else {
 			fmt.Printf("%s: not found\n", v)
+			return nil
 		}
 	}
 	return fmt.Errorf("%s: command not found", command)

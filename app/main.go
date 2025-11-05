@@ -42,7 +42,6 @@ func parseCommand(command string) error {
 		if err != nil {
 			return fmt.Errorf("incorrect command arguments: %s", command)
 		}
-		fmt.Printf("exit with status %d\n", v)
 		os.Exit(v)
 	}
 	if mainCommand == "echo" {

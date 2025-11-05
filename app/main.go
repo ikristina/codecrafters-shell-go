@@ -1,17 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 )
 
-// Ensures gofmt doesn't remove the "fmt" and "os" imports in stage 1 (feel free to remove this!)
-var (
-	_ = fmt.Fprint
-	_ = os.Stdout
-)
-
 func main() {
-	// TODO: Uncomment the code below to pass the first stage
 	fmt.Fprint(os.Stdout, "$ ")
+	// capture the user's command in the "command" variable
+	command, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		fmt.Println("error capturing the command.")
+		return
+	}
+	fmt.Fprintf(os.Stdout, "%s: command not found", command)
 }

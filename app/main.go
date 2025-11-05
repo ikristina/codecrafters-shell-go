@@ -59,7 +59,7 @@ func parseCommand(command string) error {
 			fmt.Printf("%s is a shell builtin\n", v)
 			return nil
 		} else {
-			fmt.Printf("%s: command not found\n", v)
+			fmt.Printf("%s: not found\n", v)
 		}
 	}
 	return fmt.Errorf("%s: command not found", command)

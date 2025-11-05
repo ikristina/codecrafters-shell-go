@@ -74,13 +74,8 @@ func parseCommand(command string) error {
 func isInThePath(s string) string { // return path of the command
 	paths := strings.Split(PATH, ":")
 	for _, path := range paths {
-		// fmt.Println("DEBUG", path)
+		fmt.Printf("DEBUG", path)
 		_, err := os.Stat(path + "/" + s)
-		// DEBUG
-		//if path == "/tmp/quz" {
-		//		fmt.Println(os.ReadDir(path))
-		//}
-		// DEBUG OFF
 		if err == nil {
 			return path
 		}

@@ -84,7 +84,7 @@ func isInThePath(s string) string { // return path of the command
 			return path
 		}
 		if os.IsNotExist(err) {
-			fmt.Printf("DEBUG: NOT EXIST %d: path %s\n", i, path)
+			// fmt.Printf("DEBUG: NOT EXIST %d: path %s\n", i, path)
 			continue
 		}
 	}

@@ -77,6 +77,11 @@ func isInThePath(s string) string { // return path of the command
 	for _, path := range paths {
 		// fmt.Println("DEBUG", path)
 		_, err := os.Stat(path + "/" + s)
+		// DEBUG
+		if path == "/tmp/quz" {
+			fmt.Println(os.ReadDir(path))
+		}
+		// DEBUG OFF
 		if err == nil {
 			return path
 		}

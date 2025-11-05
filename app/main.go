@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -73,7 +72,7 @@ func parseCommand(command string) error {
 }
 
 func isInThePath(s string) string { // return path of the command
-	paths := filepath.SplitList(PATH)
+	paths := strings.Split(PATH, ":")
 	for _, path := range paths {
 		// fmt.Println("DEBUG", path)
 		_, err := os.Stat(path + "/" + s)

@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-var PATH = os.Getenv("PATH")
-
 var builtins = map[string]struct{}{
 	"type": {},
 	"echo": {},
@@ -55,13 +53,12 @@ func parseCommand(command string) error {
 		return nil
 	case "type":
 		v := args[0]
-		path := isInThePath(v)
-		// fmt.Println("DEBUG: v", v)
+		filepath := isInThePath(v)
 		if _, ok := builtins[v]; ok {
 			fmt.Printf("%s is a shell builtin\n", v)
 			return nil
-		} else if path != "" {
-			fmt.Printf("%[1]s is %[2]s/%[1]s\n", v, path)
+		} else if filepath != "" {
+			fmt.Printf("%[1]s is %[2]s\n", v, filepath)
 			return nil
 		} else {
 			fmt.Printf("%s: not found\n", v)
@@ -72,20 +69,12 @@ func parseCommand(command string) error {
 }
 
 func isInThePath(s string) string { // return path of the command
-	paths := strings.Split(PATH, ":")
-	for i, path := range paths {
-		if s == "my_exe" {
-			fmt.Printf("DEBUG: %d: path %s\n", i, path)
-			dirEntries, _ := os.ReadDir(path)
-			fmt.Printf("DEBUG: files %s\n\n", dirEntries)
-		}
-		_, err := os.Stat(path + "/" + s)
-		if err == nil {
-			return path
-		}
-		if os.IsNotExist(err) {
-			// fmt.Printf("DEBUG: NOT EXIST %d: path %s\n", i, path)
-			continue
+	paths := strings.Split(os.Getenv("PATH"), ":")
+	for _, path := range paths {
+		file := path + "/" + s
+		info, err := os.Stat(file)
+		if err == nil && info.Mode()&0111 != 0 {
+			return file
 		}
 	}
 	return ""

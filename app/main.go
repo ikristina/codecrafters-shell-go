@@ -62,7 +62,7 @@ func parseCommand(command string) error {
 			fmt.Printf("%s is a shell builtin\n", v)
 			return nil
 		} else if path != "" {
-			fmt.Printf("%s is %s\n", v, path)
+			fmt.Printf("%[1]s is %[2]s/%[1]s\n", v, path)
 			return nil
 		} else {
 			fmt.Printf("%s: not found\n", v)

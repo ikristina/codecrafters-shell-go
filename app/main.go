@@ -59,6 +59,9 @@ func parseCommand(command string) error {
 	case "type":
 		typeFunc(args)
 		return nil
+	case "pwd":
+		pwd()
+		return nil
 	default:
 		output, err := exec.Command(mainCommand, args...).Output()
 		if err == nil {
@@ -116,5 +119,14 @@ func typeFunc(args []string) {
 		fmt.Printf("%[1]s is %[2]s\n", v, file)
 	} else {
 		fmt.Printf("%s: not found\n", v)
+	}
+}
+
+func pwd() {
+	dir, err := os.Getwd()
+	if err == nil {
+		fmt.Printf("%s\n", dir)
+	} else {
+		fmt.Printf("error getting pwd %s\n", err)
 	}
 }

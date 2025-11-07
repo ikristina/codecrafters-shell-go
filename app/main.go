@@ -10,86 +10,108 @@ import (
 	"strings"
 )
 
-var builtins = map[string]struct{}{
-	"type": {},
-	"echo": {},
-	"exit": {},
-	"pwd":  {},
-	"cd":   {},
+type Shell struct {
+	reader   *bufio.Reader
+	builtins map[string]struct{}
+}
+
+type Command struct {
+	Name string
+	Args []string
+	Raw  string
+}
+
+func NewShell() *Shell {
+	return &Shell{
+		reader: bufio.NewReader(os.Stdin),
+		builtins: map[string]struct{}{
+			"type": {},
+			"echo": {},
+			"exit": {},
+			"pwd":  {},
+			"cd":   {},
+		},
+	}
 }
 
 func main() {
-	buffer := bufio.NewReader(os.Stdin)
+	shell := NewShell()
+	shell.Run()
+}
+
+func (s *Shell) Run() {
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
-		// capture the user's command in the "command" variable
-		command, err := buffer.ReadString('\n')
+		commandLine, err := s.reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("error capturing the command.")
 			return
 		}
-		command = command[:len(command)-1] // the last character is "\n" which we delete here.
+		commandLine = commandLine[:len(commandLine)-1]
 
-		if err = parseCommand(command); err != nil {
+		if err = s.executeCommand(commandLine); err != nil {
 			fmt.Println(err)
 			continue
 		}
 	}
 }
 
-func parseCommand(command string) error {
-	command = strings.TrimSpace(command)
-	mainCommand := ""
-	var args []string
-	if len(command) != 0 {
-		args = strings.Split(command, " ")
-		if len(args) >= 1 {
-			mainCommand = strings.TrimSpace(args[0])
-			args = args[1:]
-		}
+func (s *Shell) parseInput(input string) Command {
+	input = strings.TrimSpace(input)
+	if len(input) == 0 {
+		return Command{}
 	}
-	if !validateCmd(mainCommand) {
-		fmt.Printf("%s: command not found\n", command)
+
+	args := strings.Split(input, " ")
+	commandName := strings.TrimSpace(args[0])
+	commandArgs := args[1:]
+
+	return Command{
+		Name: commandName,
+		Args: commandArgs,
+		Raw:  input,
+	}
+}
+
+func (s *Shell) executeCommand(commandLine string) error {
+	cmd := s.parseInput(commandLine)
+	if cmd.Name == "" {
 		return nil
 	}
-	switch mainCommand {
+
+	if !s.validateCommand(cmd.Name) {
+		fmt.Printf("%s: command not found\n", commandLine)
+		return nil
+	}
+
+	switch cmd.Name {
 	case "exit":
-		exit(command, args)
+		s.handleExit(commandLine, cmd.Args)
 	case "echo":
-		fmt.Println(strings.TrimSpace(command[4:]))
-		return nil
+		s.handleEcho(commandLine)
 	case "type":
-		typeFunc(args)
-		return nil
+		s.handleType(cmd.Args)
 	case "pwd":
-		pwd()
-		return nil
+		s.handlePwd()
 	case "cd":
-		cd(args)
-		return nil
+		s.handleCd(cmd.Args)
 	default:
-		output, err := exec.Command(mainCommand, args...).Output()
-		if err == nil {
-			fmt.Print(string(output))
-			return nil
-		}
+		s.handleExternal(cmd.Name, cmd.Args)
 	}
-	return fmt.Errorf("%s: command not found", command)
+	return nil
 }
 
-func validateCmd(s string) bool { // true if the command exists, false otherwise
-	if _, ok := builtins[s]; !ok {
-		if isInThePath(s) == "" {
-			return false
-		}
+func (s *Shell) validateCommand(name string) bool {
+	if _, ok := s.builtins[name]; ok {
+		return true
 	}
-	return true
+	return s.isInPath(name) != ""
 }
 
-func isInThePath(s string) string { // return path of the command
+func (s *Shell) isInPath(command string) string {
 	paths := strings.Split(os.Getenv("PATH"), ":")
 	for _, path := range paths {
-		file := filepath.Join(path, s)
+		file := filepath.Join(path, command)
 		info, err := os.Stat(file)
 		if err == nil && info.Mode()&0o111 != 0 {
 			return file
@@ -98,36 +120,40 @@ func isInThePath(s string) string { // return path of the command
 	return ""
 }
 
-func exit(command string, args []string) {
+func (s *Shell) handleExit(commandLine string, args []string) {
 	if len(args) == 0 {
 		os.Exit(0)
 		return
 	}
 	v, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("incorrect command arguments: %s", command)
+		fmt.Printf("incorrect command arguments: %s", commandLine)
 		return
 	}
 	os.Exit(v)
 }
 
-func typeFunc(args []string) {
+func (s *Shell) handleEcho(commandLine string) {
+	fmt.Println(strings.TrimSpace(commandLine[4:]))
+}
+
+func (s *Shell) handleType(args []string) {
 	if len(args) == 0 {
 		fmt.Println("no command found")
 		return
 	}
-	v := args[0]
-	file := isInThePath(v)
-	if _, ok := builtins[v]; ok {
-		fmt.Printf("%s is a shell builtin\n", v)
-	} else if file != "" {
-		fmt.Printf("%[1]s is %[2]s\n", v, file)
+	commandName := args[0]
+	filePath := s.isInPath(commandName)
+	if _, ok := s.builtins[commandName]; ok {
+		fmt.Printf("%s is a shell builtin\n", commandName)
+	} else if filePath != "" {
+		fmt.Printf("%[1]s is %[2]s\n", commandName, filePath)
 	} else {
-		fmt.Printf("%s: not found\n", v)
+		fmt.Printf("%s: not found\n", commandName)
 	}
 }
 
-func pwd() {
+func (s *Shell) handlePwd() {
 	dir, err := os.Getwd()
 	if err == nil {
 		fmt.Printf("%s\n", dir)
@@ -136,7 +162,7 @@ func pwd() {
 	}
 }
 
-func cd(args []string) {
+func (s *Shell) handleCd(args []string) {
 	var dir string
 	if len(args) != 0 {
 		dir = args[0]
@@ -151,5 +177,12 @@ func cd(args []string) {
 	if err != nil {
 		fmt.Printf("cd: %s: No such file or directory\n", dir)
 		return
+	}
+}
+
+func (s *Shell) handleExternal(command string, args []string) {
+	output, err := exec.Command(command, args...).Output()
+	if err == nil {
+		fmt.Print(string(output))
 	}
 }

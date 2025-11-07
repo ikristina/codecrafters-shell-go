@@ -14,7 +14,8 @@ var builtins = map[string]struct{}{
 	"type": {},
 	"echo": {},
 	"exit": {},
-	"pwd": {},
+	"pwd":  {},
+	"cd":   {},
 }
 
 func main() {
@@ -62,6 +63,9 @@ func parseCommand(command string) error {
 		return nil
 	case "pwd":
 		pwd()
+		return nil
+	case "cd":
+		cd(args)
 		return nil
 	default:
 		output, err := exec.Command(mainCommand, args...).Output()
@@ -129,5 +133,23 @@ func pwd() {
 		fmt.Printf("%s\n", dir)
 	} else {
 		fmt.Printf("error getting pwd %s\n", err)
+	}
+}
+
+func cd(args []string) {
+	var dir string
+	if len(args) != 0 {
+		dir = args[0]
+	}
+	if dir == "~" {
+		dir = os.Getenv("HOME")
+	}
+	if dir == "" {
+		dir = os.Getenv("HOME")
+	}
+	err := os.Chdir(dir)
+	if err != nil {
+		fmt.Printf("cd: %s: No such file or directory\n", dir)
+		return
 	}
 }

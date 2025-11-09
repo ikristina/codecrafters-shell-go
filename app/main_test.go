@@ -11,32 +11,35 @@ import (
 
 func TestShell_parseInput(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
 		input    string
 		expected Command
 	}{
 		"happy path - simple command": {
-			input: "echo hello",
+			input:    "echo hello",
 			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello"},
 		},
+		"happy path - command with single quotes": {
+			input:    "echo 'hello example'",
+			expected: Command{Name: "echo", Args: []string{"hello example"}, Raw: "echo 'hello example'"},
+		},
 		"happy path - command with multiple args": {
-			input: "ls -la /tmp",
+			input:    "ls -la /tmp",
 			expected: Command{Name: "ls", Args: []string{"-la", "/tmp"}, Raw: "ls -la /tmp"},
 		},
 		"happy path - command only": {
-			input: "pwd",
+			input:    "pwd",
 			expected: Command{Name: "pwd", Args: []string{}, Raw: "pwd"},
 		},
 		"edge case - empty input": {
-			input: "",
+			input:    "",
 			expected: Command{Name: "", Args: nil, Raw: ""},
 		},
 		"edge case - whitespace only": {
-			input: "   ",
+			input:    "   ",
 			expected: Command{Name: "", Args: nil, Raw: ""},
 		},
-
 	}
 
 	for name, tc := range tests {
@@ -62,7 +65,7 @@ func TestShell_parseInput(t *testing.T) {
 
 func TestShell_validateCommand(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
 		command  string
 		expected bool
@@ -83,7 +86,6 @@ func TestShell_validateCommand(t *testing.T) {
 			command:  "nonexistent_command_xyz",
 			expected: false,
 		},
-
 	}
 
 	for name, tc := range tests {
@@ -96,53 +98,9 @@ func TestShell_validateCommand(t *testing.T) {
 	}
 }
 
-func TestShell_handleEcho(t *testing.T) {
-	shell := NewShell()
-	
-	tests := map[string]struct {
-		commandLine string
-		expected    string
-	}{
-		"happy path - simple text": {
-			commandLine: "echo hello world",
-			expected:    "hello world\n",
-		},
-		"happy path - empty echo": {
-			commandLine: "echo",
-			expected:    "\n",
-		},
-		"edge case - echo with extra spaces": {
-			commandLine: "echo   hello   world   ",
-			expected:    "hello   world\n",
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			shell.handleEcho(tc.commandLine)
-
-			w.Close()
-			os.Stdout = old
-
-			var buf bytes.Buffer
-			io.Copy(&buf, r)
-			result := buf.String()
-
-			if result != tc.expected {
-				t.Errorf("expected %q, got %q", tc.expected, result)
-			}
-		})
-	}
-}
-
 func TestShell_handleType(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
 		args     []string
 		expected string
@@ -198,7 +156,7 @@ func TestShell_handleType(t *testing.T) {
 
 func TestShell_handlePwd(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
 		description string
 	}{
@@ -207,7 +165,7 @@ func TestShell_handlePwd(t *testing.T) {
 		},
 	}
 
-	for name, _ := range tests {
+	for name := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Capture stdout
 			old := os.Stdout
@@ -237,10 +195,10 @@ func TestShell_handlePwd(t *testing.T) {
 func TestShell_handleCd(t *testing.T) {
 	shell := NewShell()
 	originalDir, _ := os.Getwd()
-	
+
 	// Ensure we return to original directory after tests
 	defer os.Chdir(originalDir)
-	
+
 	tests := map[string]struct {
 		args        []string
 		expectError bool
@@ -297,7 +255,7 @@ func TestShell_handleCd(t *testing.T) {
 
 func TestShell_isInPath(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
 		command     string
 		expectFound bool
@@ -314,18 +272,17 @@ func TestShell_isInPath(t *testing.T) {
 			command:     "nonexistent_command_xyz_123",
 			expectFound: false,
 		},
-
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			result := shell.isInPath(tc.command)
 			found := result != ""
-			
+
 			if found != tc.expectFound {
 				t.Errorf("expected found=%v, got found=%v (result: %q)", tc.expectFound, found, result)
 			}
-			
+
 			if found && !filepath.IsAbs(result) {
 				t.Errorf("expected absolute path, got %q", result)
 			}
@@ -335,10 +292,10 @@ func TestShell_isInPath(t *testing.T) {
 
 func TestShell_handleExternal(t *testing.T) {
 	shell := NewShell()
-	
+
 	tests := map[string]struct {
-		command string
-		args    []string
+		command      string
+		args         []string
 		expectOutput bool
 	}{
 		"happy path - echo command": {

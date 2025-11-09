@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const SingleQuote = '\''
+
 type Shell struct {
 	reader   *bufio.Reader
 	builtins map[string]struct{}
@@ -62,7 +64,15 @@ func (s *Shell) parseInput(input string) Command {
 		return Command{}
 	}
 
-	args := strings.Split(input, " ")
+	var args []string
+
+	withSingleQuotes := strings.Split(input, "'")
+	if len(withSingleQuotes) > 1 {
+		args = s.argsWithSingleQuotes(input)
+	} else {
+		args = strings.Fields(input)
+	}
+
 	commandName := strings.TrimSpace(args[0])
 	commandArgs := args[1:]
 
@@ -88,7 +98,7 @@ func (s *Shell) executeCommand(commandLine string) error {
 	case "exit":
 		s.handleExit(commandLine, cmd.Args)
 	case "echo":
-		s.handleEcho(commandLine)
+		s.handleEcho(cmd)
 	case "type":
 		s.handleType(cmd.Args)
 	case "pwd":
@@ -106,6 +116,28 @@ func (s *Shell) validateCommand(name string) bool {
 		return true
 	}
 	return s.isInPath(name) != ""
+}
+
+func (s *Shell) argsWithSingleQuotes(input string) []string {
+	args := []string{}
+	inQuotes := false
+	currentArg := ""
+	for _, c := range input {
+		if c == SingleQuote {
+			inQuotes = !inQuotes
+		} else if c == ' ' && !inQuotes {
+			if currentArg != "" {
+				args = append(args, currentArg)
+				currentArg = ""
+			}
+		} else {
+			currentArg += string(c)
+		}
+	}
+	if currentArg != "" {
+		args = append(args, currentArg)
+	}
+	return args
 }
 
 func (s *Shell) isInPath(command string) string {
@@ -133,8 +165,12 @@ func (s *Shell) handleExit(commandLine string, args []string) {
 	os.Exit(v)
 }
 
-func (s *Shell) handleEcho(commandLine string) {
-	fmt.Println(strings.TrimSpace(commandLine[4:]))
+func (s *Shell) handleEcho(cmd Command) {
+	if cmd.Args == nil {
+		fmt.Println()
+		return
+	}
+	fmt.Println(strings.Join(cmd.Args, " "))
 }
 
 func (s *Shell) handleType(args []string) {

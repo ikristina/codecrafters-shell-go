@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const SingleQuote = '\''
+const (
+	SingleQuote = '\''
+	DoubleQuote = '"'
+)
 
 type Shell struct {
 	reader   *bufio.Reader
@@ -66,9 +69,8 @@ func (s *Shell) parseInput(input string) Command {
 
 	var args []string
 
-	withSingleQuotes := strings.Split(input, "'")
-	if len(withSingleQuotes) > 1 {
-		args = s.argsWithSingleQuotes(input)
+	if strings.ContainsAny(input, "'\"") {
+		args = s.parseQuotedArgs(input)
 	} else {
 		args = strings.Fields(input)
 	}
@@ -118,13 +120,21 @@ func (s *Shell) validateCommand(name string) bool {
 	return s.isInPath(name) != ""
 }
 
-func (s *Shell) argsWithSingleQuotes(input string) []string {
+func (s *Shell) parseQuotedArgs(input string) []string {
 	args := []string{}
 	inQuotes := false
+	quoteChar := byte(0)
 	currentArg := ""
-	for _, c := range input {
-		if c == SingleQuote {
-			inQuotes = !inQuotes
+	
+	for i := 0; i < len(input); i++ {
+		c := input[i]
+		
+		if !inQuotes && (c == SingleQuote || c == DoubleQuote) {
+			inQuotes = true
+			quoteChar = c
+		} else if inQuotes && c == quoteChar {
+			inQuotes = false
+			quoteChar = 0
 		} else if c == ' ' && !inQuotes {
 			if currentArg != "" {
 				args = append(args, currentArg)
@@ -134,6 +144,7 @@ func (s *Shell) argsWithSingleQuotes(input string) []string {
 			currentArg += string(c)
 		}
 	}
+	
 	if currentArg != "" {
 		args = append(args, currentArg)
 	}

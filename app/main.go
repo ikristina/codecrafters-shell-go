@@ -13,6 +13,7 @@ import (
 const (
 	SingleQuote = '\''
 	DoubleQuote = '"'
+	Backslash   = '\\'
 )
 
 type Shell struct {
@@ -69,7 +70,7 @@ func (s *Shell) parseInput(input string) Command {
 
 	var args []string
 
-	if strings.ContainsAny(input, "'\"") {
+	if strings.ContainsAny(input, "'\"\\") {
 		args = s.parseQuotedArgs(input)
 	} else {
 		args = strings.Fields(input)
@@ -125,11 +126,31 @@ func (s *Shell) parseQuotedArgs(input string) []string {
 	inQuotes := false
 	quoteChar := byte(0)
 	currentArg := ""
-	
+
 	for i := 0; i < len(input); i++ {
 		c := input[i]
-		
-		if !inQuotes && (c == SingleQuote || c == DoubleQuote) {
+
+		if c == Backslash && i+1 < len(input) && quoteChar != SingleQuote {
+			nextChar := input[i+1]
+			if quoteChar == DoubleQuote {
+				// Inside double quotes, only escape specific characters
+				switch nextChar {
+				case '\\':
+					currentArg += "\\"
+					i++
+				case '"':
+					currentArg += "\""
+					i++
+				default:
+					// Keep backslash literal for other characters
+					currentArg += string(c)
+				}
+			} else {
+				// Outside quotes, escape next character
+				currentArg += string(nextChar)
+				i++
+			}
+		} else if !inQuotes && (c == SingleQuote || c == DoubleQuote) {
 			inQuotes = true
 			quoteChar = c
 		} else if inQuotes && c == quoteChar {
@@ -144,7 +165,7 @@ func (s *Shell) parseQuotedArgs(input string) []string {
 			currentArg += string(c)
 		}
 	}
-	
+
 	if currentArg != "" {
 		args = append(args, currentArg)
 	}
@@ -228,8 +249,10 @@ func (s *Shell) handleCd(args []string) {
 }
 
 func (s *Shell) handleExternal(command string, args []string) {
-	output, err := exec.Command(command, args...).Output()
-	if err == nil {
-		fmt.Print(string(output))
+	output, err := exec.Command(command, args...).CombinedOutput()
+	if err != nil {
+		fmt.Print(string(output)) // Print stderr
+	} else {
+		fmt.Print(string(output)) // Print stdout
 	}
 }

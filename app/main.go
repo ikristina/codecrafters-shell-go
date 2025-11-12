@@ -22,9 +22,10 @@ type Shell struct {
 }
 
 type Command struct {
-	Name string
-	Args []string
-	Raw  string
+	Name         string
+	Args         []string
+	Raw          string
+	RedirectFile string
 }
 
 func NewShell() *Shell {
@@ -76,13 +77,24 @@ func (s *Shell) parseInput(input string) Command {
 		args = strings.Fields(input)
 	}
 
+	// Check for output redirection
+	var redirectFile string
+	for i, arg := range args {
+		if arg == ">" && i+1 < len(args) || arg == "1>" && i+1 < len(args) {
+			redirectFile = args[i+1]
+			args = append(args[:i], args[i+2:]...)
+			break
+		}
+	}
+
 	commandName := strings.TrimSpace(args[0])
 	commandArgs := args[1:]
 
 	return Command{
-		Name: commandName,
-		Args: commandArgs,
-		Raw:  input,
+		Name:         commandName,
+		Args:         commandArgs,
+		Raw:          input,
+		RedirectFile: redirectFile,
 	}
 }
 
@@ -109,7 +121,7 @@ func (s *Shell) executeCommand(commandLine string) error {
 	case "cd":
 		s.handleCd(cmd.Args)
 	default:
-		s.handleExternal(cmd.Name, cmd.Args)
+		s.handleExternal(cmd)
 	}
 	return nil
 }
@@ -198,11 +210,18 @@ func (s *Shell) handleExit(commandLine string, args []string) {
 }
 
 func (s *Shell) handleEcho(cmd Command) {
-	if cmd.Args == nil {
-		fmt.Println()
-		return
+	output := ""
+	if cmd.Args != nil {
+		output = strings.Join(cmd.Args, " ") + "\n"
+	} else {
+		output = "\n"
 	}
-	fmt.Println(strings.Join(cmd.Args, " "))
+
+	if cmd.RedirectFile != "" {
+		os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+	} else {
+		fmt.Print(output)
+	}
 }
 
 func (s *Shell) handleType(args []string) {
@@ -248,11 +267,17 @@ func (s *Shell) handleCd(args []string) {
 	}
 }
 
-func (s *Shell) handleExternal(command string, args []string) {
-	output, err := exec.Command(command, args...).CombinedOutput()
-	if err != nil {
-		fmt.Print(string(output)) // Print stderr
+func (s *Shell) handleExternal(cmd Command) {
+	execCmd := exec.Command(cmd.Name, cmd.Args...)
+	
+	if cmd.RedirectFile != "" {
+		// Redirect stdout to file, stderr stays on terminal
+		execCmd.Stderr = os.Stderr
+		output, _ := execCmd.Output()
+		os.WriteFile(cmd.RedirectFile, output, 0644)
 	} else {
-		fmt.Print(string(output)) // Print stdout
+		// Both stdout and stderr to terminal
+		output, _ := execCmd.CombinedOutput()
+		fmt.Print(string(output))
 	}
 }

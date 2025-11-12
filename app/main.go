@@ -28,6 +28,7 @@ type Command struct {
 	Raw               string
 	RedirectFile      string
 	RedirectStderr    bool
+	AppendMode        bool
 }
 
 func NewShell() *Shell {
@@ -82,15 +83,30 @@ func (s *Shell) parseInput(input string) Command {
 	// Check for output redirection
 	var redirectFile string
 	var redirectStderr bool
+	var appendMode bool
 	for i, arg := range args {
 		if (arg == ">" || arg == "1>") && i+1 < len(args) {
 			redirectFile = args[i+1]
 			redirectStderr = false
+			appendMode = false
 			args = append(args[:i], args[i+2:]...)
 			break
 		} else if arg == "2>" && i+1 < len(args) {
 			redirectFile = args[i+1]
 			redirectStderr = true
+			appendMode = false
+			args = append(args[:i], args[i+2:]...)
+			break
+		} else if (arg == ">>" || arg == "1>>") && i+1 < len(args) {
+			redirectFile = args[i+1]
+			redirectStderr = false
+			appendMode = true
+			args = append(args[:i], args[i+2:]...)
+			break
+		} else if arg == "2>>" && i+1 < len(args) {
+			redirectFile = args[i+1]
+			redirectStderr = true
+			appendMode = true
 			args = append(args[:i], args[i+2:]...)
 			break
 		}
@@ -105,6 +121,7 @@ func (s *Shell) parseInput(input string) Command {
 		Raw:               input,
 		RedirectFile:      redirectFile,
 		RedirectStderr:    redirectStderr,
+		AppendMode:        appendMode,
 	}
 }
 
@@ -229,12 +246,23 @@ func (s *Shell) handleEcho(cmd Command) {
 
 	if cmd.RedirectFile != "" {
 		if cmd.RedirectStderr {
-			// Redirecting stderr - create empty file, print stdout to terminal
-			os.WriteFile(cmd.RedirectFile, []byte(""), 0644)
+			// Redirecting stderr - create/append empty file, print stdout to terminal
+			if cmd.AppendMode {
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f.Close()
+			} else {
+				os.WriteFile(cmd.RedirectFile, []byte(""), 0644)
+			}
 			fmt.Print(output)
 		} else {
 			// Redirect stdout to file
-			os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+			if cmd.AppendMode {
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f.WriteString(output)
+				f.Close()
+			} else {
+				os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+			}
 		}
 	} else {
 		// Print to terminal
@@ -295,13 +323,25 @@ func (s *Shell) handleExternal(cmd Command) {
 			stderrPipe, _ := execCmd.StderrPipe()
 			execCmd.Start()
 			stderrData, _ := io.ReadAll(stderrPipe)
-			os.WriteFile(cmd.RedirectFile, stderrData, 0644)
+			if cmd.AppendMode {
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f.Write(stderrData)
+				f.Close()
+			} else {
+				os.WriteFile(cmd.RedirectFile, stderrData, 0644)
+			}
 			execCmd.Wait()
 		} else {
 			// Redirect stdout to file, stderr stays on terminal
 			execCmd.Stderr = os.Stderr
 			output, _ := execCmd.Output()
-			os.WriteFile(cmd.RedirectFile, output, 0644)
+			if cmd.AppendMode {
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f.Write(output)
+				f.Close()
+			} else {
+				os.WriteFile(cmd.RedirectFile, output, 0644)
+			}
 		}
 	} else {
 		// Both stdout and stderr to terminal

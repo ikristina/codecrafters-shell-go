@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,10 +23,11 @@ type Shell struct {
 }
 
 type Command struct {
-	Name         string
-	Args         []string
-	Raw          string
-	RedirectFile string
+	Name              string
+	Args              []string
+	Raw               string
+	RedirectFile      string
+	RedirectStderr    bool
 }
 
 func NewShell() *Shell {
@@ -79,9 +81,16 @@ func (s *Shell) parseInput(input string) Command {
 
 	// Check for output redirection
 	var redirectFile string
+	var redirectStderr bool
 	for i, arg := range args {
-		if arg == ">" && i+1 < len(args) || arg == "1>" && i+1 < len(args) {
+		if (arg == ">" || arg == "1>") && i+1 < len(args) {
 			redirectFile = args[i+1]
+			redirectStderr = false
+			args = append(args[:i], args[i+2:]...)
+			break
+		} else if arg == "2>" && i+1 < len(args) {
+			redirectFile = args[i+1]
+			redirectStderr = true
 			args = append(args[:i], args[i+2:]...)
 			break
 		}
@@ -91,10 +100,11 @@ func (s *Shell) parseInput(input string) Command {
 	commandArgs := args[1:]
 
 	return Command{
-		Name:         commandName,
-		Args:         commandArgs,
-		Raw:          input,
-		RedirectFile: redirectFile,
+		Name:              commandName,
+		Args:              commandArgs,
+		Raw:               input,
+		RedirectFile:      redirectFile,
+		RedirectStderr:    redirectStderr,
 	}
 }
 
@@ -218,8 +228,16 @@ func (s *Shell) handleEcho(cmd Command) {
 	}
 
 	if cmd.RedirectFile != "" {
-		os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+		if cmd.RedirectStderr {
+			// Redirecting stderr - create empty file, print stdout to terminal
+			os.WriteFile(cmd.RedirectFile, []byte(""), 0644)
+			fmt.Print(output)
+		} else {
+			// Redirect stdout to file
+			os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+		}
 	} else {
+		// Print to terminal
 		fmt.Print(output)
 	}
 }
@@ -271,10 +289,20 @@ func (s *Shell) handleExternal(cmd Command) {
 	execCmd := exec.Command(cmd.Name, cmd.Args...)
 	
 	if cmd.RedirectFile != "" {
-		// Redirect stdout to file, stderr stays on terminal
-		execCmd.Stderr = os.Stderr
-		output, _ := execCmd.Output()
-		os.WriteFile(cmd.RedirectFile, output, 0644)
+		if cmd.RedirectStderr {
+			// Redirect stderr to file, stdout stays on terminal
+			execCmd.Stdout = os.Stdout
+			stderrPipe, _ := execCmd.StderrPipe()
+			execCmd.Start()
+			stderrData, _ := io.ReadAll(stderrPipe)
+			os.WriteFile(cmd.RedirectFile, stderrData, 0644)
+			execCmd.Wait()
+		} else {
+			// Redirect stdout to file, stderr stays on terminal
+			execCmd.Stderr = os.Stderr
+			output, _ := execCmd.Output()
+			os.WriteFile(cmd.RedirectFile, output, 0644)
+		}
 	} else {
 		// Both stdout and stderr to terminal
 		output, _ := execCmd.CombinedOutput()

@@ -20,8 +20,9 @@ const (
 )
 
 type Shell struct {
-	rl       *readline.Instance
-	builtins map[string]struct{}
+	rl          *readline.Instance
+	builtins    map[string]struct{}
+	allCommands []string
 }
 
 type Command struct {
@@ -67,26 +68,8 @@ func NewShell() *Shell {
 	}
 	sort.Strings(allCommands)
 
-	// Create completion items
-	items := make([]readline.PrefixCompleterInterface, len(allCommands))
-	for i, cmd := range allCommands {
-		items[i] = readline.PcItem(cmd)
-	}
-	completer := readline.NewPrefixCompleter(items...)
-
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          "$ ",
-		AutoComplete:    completer,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
-		Listener:        &BellListener{},
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	return &Shell{
-		rl: rl,
+	shell := &Shell{
+		allCommands: allCommands,
 		builtins: map[string]struct{}{
 			"type": {},
 			"echo": {},
@@ -95,6 +78,51 @@ func NewShell() *Shell {
 			"cd":   {},
 		},
 	}
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "$ ",
+		AutoComplete:    shell,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+		Listener:        &BellListener{},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	shell.rl = rl
+	return shell
+}
+
+func (s *Shell) Do(line []rune, pos int) ([][]rune, int) {
+	lineStr := string(line[:pos])
+	matches := []string{}
+	for _, cmd := range s.allCommands {
+		if strings.HasPrefix(cmd, lineStr) {
+			matches = append(matches, cmd)
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil, len(lineStr)
+	}
+
+	if len(matches) == 1 {
+		return [][]rune{[]rune(matches[0])}, len(lineStr)
+	}
+
+	// Multiple matches - print them and redisplay prompt
+	fmt.Println()
+	for i, match := range matches {
+		if i > 0 {
+			fmt.Print("  ")
+		}
+		fmt.Print(match)
+	}
+	fmt.Println()
+	fmt.Printf("$ %s", lineStr)
+
+	return [][]rune{line[:pos]}, len(lineStr)
 }
 
 func main() {

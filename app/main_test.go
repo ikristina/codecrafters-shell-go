@@ -18,43 +18,47 @@ func TestShell_parseInput(t *testing.T) {
 	}{
 		"happy path - simple command": {
 			input:    "echo hello",
-			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello"},
+			expected: Command{Name: "echo", Args: []string{"hello"}},
 		},
 		"happy path - command with single quotes": {
 			input:    "echo 'hello example'",
-			expected: Command{Name: "echo", Args: []string{"hello example"}, Raw: "echo 'hello example'"},
+			expected: Command{Name: "echo", Args: []string{"hello example"}},
 		},
 		"happy path - command with multiple args": {
 			input:    "ls -la /tmp",
-			expected: Command{Name: "ls", Args: []string{"-la", "/tmp"}, Raw: "ls -la /tmp"},
+			expected: Command{Name: "ls", Args: []string{"-la", "/tmp"}},
 		},
 		"happy path - command only": {
 			input:    "pwd",
-			expected: Command{Name: "pwd", Args: []string{}, Raw: "pwd"},
+			expected: Command{Name: "pwd", Args: []string{}},
 		},
 		"edge case - empty input": {
 			input:    "",
-			expected: Command{Name: "", Args: nil, Raw: ""},
+			expected: Command{Name: "", Args: nil},
 		},
 		"edge case - whitespace only": {
 			input:    "   ",
-			expected: Command{Name: "", Args: nil, Raw: ""},
+			expected: Command{Name: "", Args: nil},
 		},
 		"happy path - stdout redirect": {
 			input:    "echo hello > file.txt",
-			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello > file.txt", RedirectFile: "file.txt", RedirectStderr: false, AppendMode: false},
+			expected: Command{Name: "echo", Args: []string{"hello"}, RedirectFile: "file.txt", RedirectStderr: false, AppendMode: false},
 		},
 		"happy path - stderr redirect": {
 			input:    "cat file 2> error.txt",
-			expected: Command{Name: "cat", Args: []string{"file"}, Raw: "cat file 2> error.txt", RedirectFile: "error.txt", RedirectStderr: true, AppendMode: false},
+			expected: Command{Name: "cat", Args: []string{"file"}, RedirectFile: "error.txt", RedirectStderr: true, AppendMode: false},
 		},
 		"happy path - stdout append": {
 			input:    "echo hello >> file.txt",
-			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello >> file.txt", RedirectFile: "file.txt", RedirectStderr: false, AppendMode: true},
+			expected: Command{Name: "echo", Args: []string{"hello"}, RedirectFile: "file.txt", RedirectStderr: false, AppendMode: true},
 		},
 		"happy path - stderr append": {
 			input:    "cat file 2>> error.txt",
-			expected: Command{Name: "cat", Args: []string{"file"}, Raw: "cat file 2>> error.txt", RedirectFile: "error.txt", RedirectStderr: true, AppendMode: true},
+			expected: Command{Name: "cat", Args: []string{"file"}, RedirectFile: "error.txt", RedirectStderr: true, AppendMode: true},
+		},
+		"happy path - command with quotes and redirect": {
+			input:    `echo "hello world" > file.txt`,
+			expected: Command{Name: "echo", Args: []string{"hello world"}, RedirectFile: "file.txt", RedirectStderr: false, AppendMode: false},
 		},
 	}
 
@@ -72,9 +76,7 @@ func TestShell_parseInput(t *testing.T) {
 					t.Errorf("expected arg[%d] %q, got %q", i, tc.expected.Args[i], arg)
 				}
 			}
-			if result.Raw != tc.expected.Raw {
-				t.Errorf("expected Raw %q, got %q", tc.expected.Raw, result.Raw)
-			}
+
 		})
 	}
 }
@@ -430,6 +432,18 @@ func TestShell_parseQuotedArgs(t *testing.T) {
 			input:    ` echo hello`,
 			expected: []string{"echo", "hello"},
 		},
+		"happy path - nested quotes": {
+			input:    `echo "it's working"`,
+			expected: []string{"echo", "it's working"},
+		},
+		"happy path - adjacent quotes": {
+			input:    `echo "hello""world"`,
+			expected: []string{"echo", "helloworld"},
+		},
+		"edge case - only spaces between quotes": {
+			input:    `echo "  "`,
+			expected: []string{"echo", "  "},
+		},
 	}
 
 	for name, tc := range tests {
@@ -443,6 +457,49 @@ func TestShell_parseQuotedArgs(t *testing.T) {
 				if result[i] != tc.expected[i] {
 					t.Errorf("arg[%d]: expected %q, got %q", i, tc.expected[i], result[i])
 				}
+			}
+		})
+	}
+}
+
+func TestShell_Do(t *testing.T) {
+	shell := &Shell{
+		allCommands: []string{"cat", "cd", "echo", "exit", "ls", "pwd", "type"},
+	}
+
+	tests := map[string]struct {
+		input          string
+		expectedCount  int
+		expectedSuffix string
+	}{
+		"single match": {
+			input:          "ech",
+			expectedCount:  1,
+			expectedSuffix: "o ",
+		},
+		"multiple matches": {
+			input:         "c",
+			expectedCount: 0, // Returns nil for multiple matches
+		},
+		"no matches": {
+			input:         "xyz",
+			expectedCount: 0,
+		},
+		"exact match": {
+			input:          "echo",
+			expectedCount:  1,
+			expectedSuffix: " ",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, _ := shell.Do([]rune(tc.input), len(tc.input))
+			if len(result) != tc.expectedCount {
+				t.Errorf("expected %d results, got %d", tc.expectedCount, len(result))
+			}
+			if tc.expectedCount == 1 && string(result[0]) != tc.expectedSuffix {
+				t.Errorf("expected suffix %q, got %q", tc.expectedSuffix, string(result[0]))
 			}
 		})
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,75 +16,72 @@ const (
 	SingleQuote = '\''
 	DoubleQuote = '"'
 	Backslash   = '\\'
+
+	// FilePermission is 0o644 (rw-r--r--): owner can read/write, others can read
+	FilePermission = 0o644
+	// ExecPermission is 0o111 (--x--x--x): checks if any execute bit is set
+	ExecPermission = 0o111
 )
 
+// Shell represents a POSIX-compliant shell with readline support
 type Shell struct {
 	rl          *readline.Instance
-	builtins    map[string]struct{}
 	allCommands []string
+}
+
+var builtinCommands = map[string]struct{}{
+	"type": {},
+	"echo": {},
+	"exit": {},
+	"pwd":  {},
+	"cd":   {},
 }
 
 type Command struct {
 	Name           string
 	Args           []string
-	Raw            string
 	RedirectFile   string
 	RedirectStderr bool
 	AppendMode     bool
 }
 
-// BellListener is to implement Listener interface from readline library
+// BellListener implements readline.Listener to ring a bell on TAB press
 type BellListener struct{}
 
-// OnChange method gets called with every key press.
+// OnChange is called on every keypress
 func (l *BellListener) OnChange(line []rune, pos int, key rune) ([]rune, int, bool) {
 	if key == readline.CharTab {
-		fmt.Print("\x07") // will ring a bell in the case of successful and unsuccessful autocomplete.
+		fmt.Print("\x07")
 	}
 	return line, pos, false
 }
 
+// NewShell creates and initializes a new Shell instance with autocomplete support
 func NewShell() *Shell {
-	builtins := []string{"type", "echo", "exit", "pwd", "cd"}
+	paths := strings.Split(os.Getenv("PATH"), ":")
 	executables := make(map[string]struct{})
 
-	// Collect executables from PATH
-	paths := strings.Split(os.Getenv("PATH"), ":")
 	for _, path := range paths {
-		files, _ := os.ReadDir(path)
-		for _, file := range files {
-			if !file.IsDir() {
-				executables[file.Name()] = struct{}{}
+		if files, err := os.ReadDir(path); err == nil {
+			for _, file := range files {
+				if !file.IsDir() {
+					executables[file.Name()] = struct{}{}
+				}
 			}
 		}
 	}
 
-	// Combine builtins and executables (builtins take precedence)
-	allCommandsMap := make(map[string]struct{})
-	for _, cmd := range builtins {
-		allCommandsMap[cmd] = struct{}{}
-	}
-	for name := range executables {
-		allCommandsMap[name] = struct{}{}
+	for cmd := range builtinCommands {
+		executables[cmd] = struct{}{}
 	}
 
-	// Convert to sorted slice
-	allCommands := make([]string, 0, len(allCommandsMap))
-	for cmd := range allCommandsMap {
+	allCommands := make([]string, 0, len(executables))
+	for cmd := range executables {
 		allCommands = append(allCommands, cmd)
 	}
 	sort.Strings(allCommands)
 
-	shell := &Shell{
-		allCommands: allCommands,
-		builtins: map[string]struct{}{
-			"type": {},
-			"echo": {},
-			"exit": {},
-			"pwd":  {},
-			"cd":   {},
-		},
-	}
+	shell := &Shell{allCommands: allCommands}
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          "$ ",
@@ -102,6 +98,7 @@ func NewShell() *Shell {
 	return shell
 }
 
+// Do implements readline.AutoCompleter interface
 func (s *Shell) Do(line []rune, pos int) ([][]rune, int) {
 	lineStr := string(line[:pos])
 	matches := []string{}
@@ -139,6 +136,7 @@ func main() {
 	shell.Run()
 }
 
+// Run starts the shell's REPL (Read-Eval-Print Loop)
 func (s *Shell) Run() {
 	defer s.rl.Close()
 
@@ -170,49 +168,37 @@ func (s *Shell) parseInput(input string) Command {
 		args = strings.Fields(input)
 	}
 
-	// Check for output redirection
-	var redirectFile string
-	var redirectStderr bool
-	var appendMode bool
 	for i, arg := range args {
-		if (arg == ">" || arg == "1>") && i+1 < len(args) {
+		if i+1 >= len(args) {
+			continue
+		}
+		var redirectFile string
+		var redirectStderr, appendMode bool
+		switch arg {
+		case ">", "1>":
 			redirectFile = args[i+1]
-			redirectStderr = false
-			appendMode = false
 			args = append(args[:i], args[i+2:]...)
-			break
-		} else if arg == "2>" && i+1 < len(args) {
-			redirectFile = args[i+1]
-			redirectStderr = true
-			appendMode = false
-			args = append(args[:i], args[i+2:]...)
-			break
-		} else if (arg == ">>" || arg == "1>>") && i+1 < len(args) {
-			redirectFile = args[i+1]
-			redirectStderr = false
-			appendMode = true
-			args = append(args[:i], args[i+2:]...)
-			break
-		} else if arg == "2>>" && i+1 < len(args) {
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile}
+		case "2>":
 			redirectFile = args[i+1]
 			redirectStderr = true
+			args = append(args[:i], args[i+2:]...)
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: redirectStderr}
+		case ">>", "1>>":
+			redirectFile = args[i+1]
 			appendMode = true
 			args = append(args[:i], args[i+2:]...)
-			break
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, AppendMode: appendMode}
+		case "2>>":
+			redirectFile = args[i+1]
+			redirectStderr = true
+			appendMode = true
+			args = append(args[:i], args[i+2:]...)
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: redirectStderr, AppendMode: appendMode}
 		}
 	}
 
-	commandName := strings.TrimSpace(args[0])
-	commandArgs := args[1:]
-
-	return Command{
-		Name:           commandName,
-		Args:           commandArgs,
-		Raw:            input,
-		RedirectFile:   redirectFile,
-		RedirectStderr: redirectStderr,
-		AppendMode:     appendMode,
-	}
+	return Command{Name: strings.TrimSpace(args[0]), Args: args[1:]}
 }
 
 func (s *Shell) executeCommand(commandLine string) error {
@@ -244,17 +230,17 @@ func (s *Shell) executeCommand(commandLine string) error {
 }
 
 func (s *Shell) validateCommand(name string) bool {
-	if _, ok := s.builtins[name]; ok {
+	if _, ok := builtinCommands[name]; ok {
 		return true
 	}
 	return s.isInPath(name) != ""
 }
 
 func (s *Shell) parseQuotedArgs(input string) []string {
-	args := []string{}
+	var args []string
+	var currentArg strings.Builder
 	inQuotes := false
 	quoteChar := byte(0)
-	currentArg := ""
 
 	for i := 0; i < len(input); i++ {
 		c := input[i]
@@ -262,21 +248,14 @@ func (s *Shell) parseQuotedArgs(input string) []string {
 		if c == Backslash && i+1 < len(input) && quoteChar != SingleQuote {
 			nextChar := input[i+1]
 			if quoteChar == DoubleQuote {
-				// Inside double quotes, only escape specific characters
-				switch nextChar {
-				case '\\':
-					currentArg += "\\"
+				if nextChar == '\\' || nextChar == '"' {
+					currentArg.WriteByte(nextChar)
 					i++
-				case '"':
-					currentArg += "\""
-					i++
-				default:
-					// Keep backslash literal for other characters
-					currentArg += string(c)
+				} else {
+					currentArg.WriteByte(c)
 				}
 			} else {
-				// Outside quotes, escape next character
-				currentArg += string(nextChar)
+				currentArg.WriteByte(nextChar)
 				i++
 			}
 		} else if !inQuotes && (c == SingleQuote || c == DoubleQuote) {
@@ -286,17 +265,17 @@ func (s *Shell) parseQuotedArgs(input string) []string {
 			inQuotes = false
 			quoteChar = 0
 		} else if c == ' ' && !inQuotes {
-			if currentArg != "" {
-				args = append(args, currentArg)
-				currentArg = ""
+			if currentArg.Len() > 0 {
+				args = append(args, currentArg.String())
+				currentArg.Reset()
 			}
 		} else {
-			currentArg += string(c)
+			currentArg.WriteByte(c)
 		}
 	}
 
-	if currentArg != "" {
-		args = append(args, currentArg)
+	if currentArg.Len() > 0 {
+		args = append(args, currentArg.String())
 	}
 	return args
 }
@@ -306,7 +285,7 @@ func (s *Shell) isInPath(command string) string {
 	for _, path := range paths {
 		file := filepath.Join(path, command)
 		info, err := os.Stat(file)
-		if err == nil && info.Mode()&0o111 != 0 {
+		if err == nil && info.Mode()&ExecPermission != 0 {
 			return file
 		}
 	}
@@ -327,36 +306,24 @@ func (s *Shell) handleExit(commandLine string, args []string) {
 }
 
 func (s *Shell) handleEcho(cmd Command) {
-	output := ""
-	if cmd.Args != nil {
-		output = strings.Join(cmd.Args, " ") + "\n"
+	output := strings.Join(cmd.Args, " ") + "\n"
+	if cmd.RedirectFile != "" && !cmd.RedirectStderr {
+		s.writeToFile(cmd.RedirectFile, []byte(output), cmd.AppendMode)
 	} else {
-		output = "\n"
-	}
-
-	if cmd.RedirectFile != "" {
-		if cmd.RedirectStderr {
-			// Redirecting stderr - create/append empty file, print stdout to terminal
-			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-				f.Close()
-			} else {
-				os.WriteFile(cmd.RedirectFile, []byte(""), 0o644)
-			}
-			fmt.Print(output)
-		} else {
-			// Redirect stdout to file
-			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-				f.WriteString(output)
-				f.Close()
-			} else {
-				os.WriteFile(cmd.RedirectFile, []byte(output), 0o644)
-			}
+		if cmd.RedirectFile != "" {
+			s.writeToFile(cmd.RedirectFile, []byte(""), cmd.AppendMode)
 		}
-	} else {
-		// Print to terminal
 		fmt.Print(output)
+	}
+}
+
+func (s *Shell) writeToFile(path string, data []byte, append bool) {
+	if append {
+		f, _ := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, FilePermission)
+		f.Write(data)
+		f.Close()
+	} else {
+		os.WriteFile(path, data, FilePermission)
 	}
 }
 
@@ -367,7 +334,7 @@ func (s *Shell) handleType(args []string) {
 	}
 	commandName := args[0]
 	filePath := s.isInPath(commandName)
-	if _, ok := s.builtins[commandName]; ok {
+	if _, ok := builtinCommands[commandName]; ok {
 		fmt.Printf("%s is a shell builtin\n", commandName)
 	} else if filePath != "" {
 		fmt.Printf("%[1]s is %[2]s\n", commandName, filePath)
@@ -386,20 +353,12 @@ func (s *Shell) handlePwd() {
 }
 
 func (s *Shell) handleCd(args []string) {
-	var dir string
-	if len(args) != 0 {
+	dir := os.Getenv("HOME")
+	if len(args) > 0 && args[0] != "~" {
 		dir = args[0]
 	}
-	if dir == "~" {
-		dir = os.Getenv("HOME")
-	}
-	if dir == "" {
-		dir = os.Getenv("HOME")
-	}
-	err := os.Chdir(dir)
-	if err != nil {
+	if err := os.Chdir(dir); err != nil {
 		fmt.Printf("cd: %s: No such file or directory\n", dir)
-		return
 	}
 }
 
@@ -408,33 +367,15 @@ func (s *Shell) handleExternal(cmd Command) {
 
 	if cmd.RedirectFile != "" {
 		if cmd.RedirectStderr {
-			// Redirect stderr to file, stdout stays on terminal
 			execCmd.Stdout = os.Stdout
-			stderrPipe, _ := execCmd.StderrPipe()
-			execCmd.Start()
-			stderrData, _ := io.ReadAll(stderrPipe)
-			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-				f.Write(stderrData)
-				f.Close()
-			} else {
-				os.WriteFile(cmd.RedirectFile, stderrData, 0o644)
-			}
-			execCmd.Wait()
+			output, _ := execCmd.CombinedOutput()
+			s.writeToFile(cmd.RedirectFile, output, cmd.AppendMode)
 		} else {
-			// Redirect stdout to file, stderr stays on terminal
 			execCmd.Stderr = os.Stderr
 			output, _ := execCmd.Output()
-			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-				f.Write(output)
-				f.Close()
-			} else {
-				os.WriteFile(cmd.RedirectFile, output, 0o644)
-			}
+			s.writeToFile(cmd.RedirectFile, output, cmd.AppendMode)
 		}
 	} else {
-		// Both stdout and stderr to terminal
 		output, _ := execCmd.CombinedOutput()
 		fmt.Print(string(output))
 	}

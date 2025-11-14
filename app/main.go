@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/chzyer/readline"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 )
 
 type Shell struct {
-	reader   *bufio.Reader
+	rl       *readline.Instance
 	builtins map[string]struct{}
 }
 
@@ -32,8 +33,39 @@ type Command struct {
 }
 
 func NewShell() *Shell {
+	items := []readline.PrefixCompleterInterface{
+		readline.PcItem("type"),
+		readline.PcItem("echo"),
+		readline.PcItem("exit"),
+		readline.PcItem("pwd"),
+		readline.PcItem("cd"),
+	}
+
+	// Add executables from PATH
+	paths := strings.Split(os.Getenv("PATH"), ":")
+	for _, path := range paths {
+		files, _ := os.ReadDir(path)
+		for _, file := range files {
+			if !file.IsDir() {
+				items = append(items, readline.PcItem(file.Name()))
+			}
+		}
+	}
+	// Create autocomplete function
+	completer := readline.NewPrefixCompleter(items...)
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          "$ ",
+		AutoComplete:    completer,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	return &Shell{
-		reader: bufio.NewReader(os.Stdin),
+		rl: rl,
 		builtins: map[string]struct{}{
 			"type": {},
 			"echo": {},
@@ -50,14 +82,13 @@ func main() {
 }
 
 func (s *Shell) Run() {
+	defer s.rl.Close()
+
 	for {
-		fmt.Fprint(os.Stdout, "$ ")
-		commandLine, err := s.reader.ReadString('\n')
+		commandLine, err := s.rl.Readline()
 		if err != nil {
-			fmt.Println("error capturing the command.")
 			return
 		}
-		commandLine = commandLine[:len(commandLine)-1]
 
 		if err = s.executeCommand(commandLine); err != nil {
 			fmt.Println(err)

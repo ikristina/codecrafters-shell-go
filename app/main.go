@@ -24,12 +24,23 @@ type Shell struct {
 }
 
 type Command struct {
-	Name              string
-	Args              []string
-	Raw               string
-	RedirectFile      string
-	RedirectStderr    bool
-	AppendMode        bool
+	Name           string
+	Args           []string
+	Raw            string
+	RedirectFile   string
+	RedirectStderr bool
+	AppendMode     bool
+}
+
+// BellListener is to implement Listener interface from readline library
+type BellListener struct{}
+
+// OnChange method gets called with every key press.
+func (l *BellListener) OnChange(line []rune, pos int, key rune) ([]rune, int, bool) {
+	if key == readline.CharTab {
+		fmt.Print("\x07") // will ring a bell in the case of successful and unsuccessful autocomplete.
+	}
+	return line, pos, false
 }
 
 func NewShell() *Shell {
@@ -59,6 +70,7 @@ func NewShell() *Shell {
 		AutoComplete:    completer,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
+		Listener:        &BellListener{},
 	})
 	if err != nil {
 		panic(err)
@@ -87,6 +99,7 @@ func (s *Shell) Run() {
 	for {
 		commandLine, err := s.rl.Readline()
 		if err != nil {
+			fmt.Println("\x07")
 			return
 		}
 
@@ -147,12 +160,12 @@ func (s *Shell) parseInput(input string) Command {
 	commandArgs := args[1:]
 
 	return Command{
-		Name:              commandName,
-		Args:              commandArgs,
-		Raw:               input,
-		RedirectFile:      redirectFile,
-		RedirectStderr:    redirectStderr,
-		AppendMode:        appendMode,
+		Name:           commandName,
+		Args:           commandArgs,
+		Raw:            input,
+		RedirectFile:   redirectFile,
+		RedirectStderr: redirectStderr,
+		AppendMode:     appendMode,
 	}
 }
 
@@ -279,20 +292,20 @@ func (s *Shell) handleEcho(cmd Command) {
 		if cmd.RedirectStderr {
 			// Redirecting stderr - create/append empty file, print stdout to terminal
 			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 				f.Close()
 			} else {
-				os.WriteFile(cmd.RedirectFile, []byte(""), 0644)
+				os.WriteFile(cmd.RedirectFile, []byte(""), 0o644)
 			}
 			fmt.Print(output)
 		} else {
 			// Redirect stdout to file
 			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 				f.WriteString(output)
 				f.Close()
 			} else {
-				os.WriteFile(cmd.RedirectFile, []byte(output), 0644)
+				os.WriteFile(cmd.RedirectFile, []byte(output), 0o644)
 			}
 		}
 	} else {
@@ -346,7 +359,7 @@ func (s *Shell) handleCd(args []string) {
 
 func (s *Shell) handleExternal(cmd Command) {
 	execCmd := exec.Command(cmd.Name, cmd.Args...)
-	
+
 	if cmd.RedirectFile != "" {
 		if cmd.RedirectStderr {
 			// Redirect stderr to file, stdout stays on terminal
@@ -355,11 +368,11 @@ func (s *Shell) handleExternal(cmd Command) {
 			execCmd.Start()
 			stderrData, _ := io.ReadAll(stderrPipe)
 			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 				f.Write(stderrData)
 				f.Close()
 			} else {
-				os.WriteFile(cmd.RedirectFile, stderrData, 0644)
+				os.WriteFile(cmd.RedirectFile, stderrData, 0o644)
 			}
 			execCmd.Wait()
 		} else {
@@ -367,11 +380,11 @@ func (s *Shell) handleExternal(cmd Command) {
 			execCmd.Stderr = os.Stderr
 			output, _ := execCmd.Output()
 			if cmd.AppendMode {
-				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				f, _ := os.OpenFile(cmd.RedirectFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 				f.Write(output)
 				f.Close()
 			} else {
-				os.WriteFile(cmd.RedirectFile, output, 0644)
+				os.WriteFile(cmd.RedirectFile, output, 0o644)
 			}
 		}
 	} else {

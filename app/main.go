@@ -108,7 +108,7 @@ func (s *Shell) Do(line []rune, pos int) ([][]rune, int) {
 	}
 
 	if len(matches) == 1 {
-		return [][]rune{[]rune(matches[0] + " ")}, 0
+		return [][]rune{[]rune(matches[0] + " ")}, len(lineStr)
 	}
 
 	// Multiple matches - print them and redisplay prompt

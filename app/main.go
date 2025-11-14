@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -44,25 +45,33 @@ func (l *BellListener) OnChange(line []rune, pos int, key rune) ([]rune, int, bo
 }
 
 func NewShell() *Shell {
-	items := []readline.PrefixCompleterInterface{
-		readline.PcItem("type"),
-		readline.PcItem("echo"),
-		readline.PcItem("exit"),
-		readline.PcItem("pwd"),
-		readline.PcItem("cd"),
-	}
+	builtins := []string{"type", "echo", "exit", "pwd", "cd"}
+	executables := make(map[string]struct{})
 
-	// Add executables from PATH
+	// Collect executables from PATH
 	paths := strings.Split(os.Getenv("PATH"), ":")
 	for _, path := range paths {
 		files, _ := os.ReadDir(path)
 		for _, file := range files {
 			if !file.IsDir() {
-				items = append(items, readline.PcItem(file.Name()))
+				executables[file.Name()] = struct{}{}
 			}
 		}
 	}
-	// Create autocomplete function
+
+	// Combine and sort all commands
+	allCommands := make([]string, 0, len(builtins)+len(executables))
+	allCommands = append(allCommands, builtins...)
+	for name := range executables {
+		allCommands = append(allCommands, name)
+	}
+	sort.Strings(allCommands)
+
+	// Create completion items
+	items := make([]readline.PrefixCompleterInterface, len(allCommands))
+	for i, cmd := range allCommands {
+		items[i] = readline.PcItem(cmd)
+	}
 	completer := readline.NewPrefixCompleter(items...)
 
 	rl, err := readline.NewEx(&readline.Config{

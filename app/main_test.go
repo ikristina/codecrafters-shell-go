@@ -40,6 +40,22 @@ func TestShell_parseInput(t *testing.T) {
 			input:    "   ",
 			expected: Command{Name: "", Args: nil, Raw: ""},
 		},
+		"happy path - stdout redirect": {
+			input:    "echo hello > file.txt",
+			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello > file.txt", RedirectFile: "file.txt", RedirectStderr: false, AppendMode: false},
+		},
+		"happy path - stderr redirect": {
+			input:    "cat file 2> error.txt",
+			expected: Command{Name: "cat", Args: []string{"file"}, Raw: "cat file 2> error.txt", RedirectFile: "error.txt", RedirectStderr: true, AppendMode: false},
+		},
+		"happy path - stdout append": {
+			input:    "echo hello >> file.txt",
+			expected: Command{Name: "echo", Args: []string{"hello"}, Raw: "echo hello >> file.txt", RedirectFile: "file.txt", RedirectStderr: false, AppendMode: true},
+		},
+		"happy path - stderr append": {
+			input:    "cat file 2>> error.txt",
+			expected: Command{Name: "cat", Args: []string{"file"}, Raw: "cat file 2>> error.txt", RedirectFile: "error.txt", RedirectStderr: true, AppendMode: true},
+		},
 	}
 
 	for name, tc := range tests {
@@ -86,6 +102,18 @@ func TestShell_validateCommand(t *testing.T) {
 			command:  "nonexistent_command_xyz",
 			expected: false,
 		},
+		"happy path - pwd builtin": {
+			command:  "pwd",
+			expected: true,
+		},
+		"happy path - cd builtin": {
+			command:  "cd",
+			expected: true,
+		},
+		"happy path - exit builtin": {
+			command:  "exit",
+			expected: true,
+		},
 	}
 
 	for name, tc := range tests {
@@ -120,6 +148,14 @@ func TestShell_handleType(t *testing.T) {
 		"sad path - no arguments": {
 			args:     []string{},
 			expected: "no command found\n",
+		},
+		"happy path - pwd builtin": {
+			args:     []string{"pwd"},
+			expected: "pwd is a shell builtin\n",
+		},
+		"happy path - cd builtin": {
+			args:     []string{"cd"},
+			expected: "cd is a shell builtin\n",
 		},
 	}
 
@@ -219,6 +255,10 @@ func TestShell_handleCd(t *testing.T) {
 			args:        []string{"/nonexistent_directory_xyz"},
 			expectError: true,
 		},
+		"happy path - relative path": {
+			args:        []string{"."},
+			expectError: false,
+		},
 	}
 
 	for name, tc := range tests {
@@ -272,6 +312,10 @@ func TestShell_isInPath(t *testing.T) {
 			command:     "nonexistent_command_xyz_123",
 			expectFound: false,
 		},
+		"happy path - echo command exists": {
+			command:     "echo",
+			expectFound: true,
+		},
 	}
 
 	for name, tc := range tests {
@@ -294,19 +338,16 @@ func TestShell_handleExternal(t *testing.T) {
 	shell := NewShell()
 
 	tests := map[string]struct {
-		command      string
-		args         []string
+		cmd          Command
 		expectOutput bool
 	}{
 		"happy path - echo command": {
-			command:      "echo",
-			args:         []string{"test"},
+			cmd:          Command{Name: "echo", Args: []string{"test"}},
 			expectOutput: true,
 		},
 		"happy path - ls with invalid path": {
-			command:      "ls",
-			args:         []string{"/nonexistent"},
-			expectOutput: false,
+			cmd:          Command{Name: "ls", Args: []string{"/nonexistent"}},
+			expectOutput: true,
 		},
 	}
 
@@ -317,7 +358,7 @@ func TestShell_handleExternal(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			shell.handleExternal(tc.command, tc.args)
+			shell.handleExternal(tc.cmd)
 
 			w.Close()
 			os.Stdout = old
@@ -329,6 +370,79 @@ func TestShell_handleExternal(t *testing.T) {
 			hasOutput := result != ""
 			if hasOutput != tc.expectOutput {
 				t.Errorf("expected output=%v, got output=%v (result: %q)", tc.expectOutput, hasOutput, result)
+			}
+		})
+	}
+}
+
+func TestShell_parseQuotedArgs(t *testing.T) {
+	shell := NewShell()
+
+	tests := map[string]struct {
+		input    string
+		expected []string
+	}{
+		"happy path - simple args": {
+			input:    "echo hello world",
+			expected: []string{"echo", "hello", "world"},
+		},
+		"happy path - double quotes": {
+			input:    `echo "hello world"`,
+			expected: []string{"echo", "hello world"},
+		},
+		"happy path - single quotes": {
+			input:    `echo 'hello world'`,
+			expected: []string{"echo", "hello world"},
+		},
+		"happy path - escaped double quotes": {
+			input:    `echo "hello \"world\""`,
+			expected: []string{"echo", `hello "world"`},
+		},
+		"happy path - backslash in single quotes": {
+			input:    `echo 'hello\'world'`,
+			expected: []string{"echo", `hello\world`},
+		},
+		"happy path - escaped space": {
+			input:    `echo hello\ world`,
+			expected: []string{"echo", "hello world"},
+		},
+		"happy path - escaped backslash in double quotes": {
+			input:    `echo "hello\\"`,
+			expected: []string{"echo", `hello\`},
+		},
+		"happy path - mixed quotes": {
+			input:    `echo "hello" 'world'`,
+			expected: []string{"echo", "hello", "world"},
+		},
+		"happy path - empty quotes": {
+			input:    `echo ""`,
+			expected: []string{"echo"},
+		},
+		"edge case - multiple spaces": {
+			input:    `echo   hello    world`,
+			expected: []string{"echo", "hello", "world"},
+		},
+		"edge case - trailing space": {
+			input:    `echo hello `,
+			expected: []string{"echo", "hello"},
+		},
+		"edge case - leading space": {
+			input:    ` echo hello`,
+			expected: []string{"echo", "hello"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := shell.parseQuotedArgs(tc.input)
+			if len(result) != len(tc.expected) {
+				t.Errorf("expected %d args, got %d", len(tc.expected), len(result))
+				return
+			}
+			for i := range result {
+				if result[i] != tc.expected[i] {
+					t.Errorf("arg[%d]: expected %q, got %q", i, tc.expected[i], result[i])
+				}
 			}
 		})
 	}

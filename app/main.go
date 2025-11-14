@@ -60,11 +60,19 @@ func NewShell() *Shell {
 		}
 	}
 
-	// Combine and sort all commands
-	allCommands := make([]string, 0, len(builtins)+len(executables))
-	allCommands = append(allCommands, builtins...)
+	// Combine builtins and executables (builtins take precedence)
+	allCommandsMap := make(map[string]struct{})
+	for _, cmd := range builtins {
+		allCommandsMap[cmd] = struct{}{}
+	}
 	for name := range executables {
-		allCommands = append(allCommands, name)
+		allCommandsMap[name] = struct{}{}
+	}
+
+	// Convert to sorted slice
+	allCommands := make([]string, 0, len(allCommandsMap))
+	for cmd := range allCommandsMap {
+		allCommands = append(allCommands, cmd)
 	}
 	sort.Strings(allCommands)
 

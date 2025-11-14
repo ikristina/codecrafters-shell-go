@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,29 +173,23 @@ func (s *Shell) parseInput(input string) Command {
 		if i+1 >= len(args) {
 			continue
 		}
-		var redirectFile string
-		var redirectStderr, appendMode bool
 		switch arg {
 		case ">", "1>":
-			redirectFile = args[i+1]
+			redirectFile := args[i+1]
 			args = append(args[:i], args[i+2:]...)
 			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile}
 		case "2>":
-			redirectFile = args[i+1]
-			redirectStderr = true
+			redirectFile := args[i+1]
 			args = append(args[:i], args[i+2:]...)
-			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: redirectStderr}
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: true}
 		case ">>", "1>>":
-			redirectFile = args[i+1]
-			appendMode = true
+			redirectFile := args[i+1]
 			args = append(args[:i], args[i+2:]...)
-			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, AppendMode: appendMode}
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, AppendMode: true}
 		case "2>>":
-			redirectFile = args[i+1]
-			redirectStderr = true
-			appendMode = true
+			redirectFile := args[i+1]
 			args = append(args[:i], args[i+2:]...)
-			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: redirectStderr, AppendMode: appendMode}
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: true, AppendMode: true}
 		}
 	}
 
@@ -319,11 +314,12 @@ func (s *Shell) handleEcho(cmd Command) {
 
 func (s *Shell) writeToFile(path string, data []byte, append bool) {
 	if append {
-		f, _ := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, FilePermission)
-		f.Write(data)
-		f.Close()
+		if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, FilePermission); err == nil {
+			_, _ = f.Write(data)
+			_ = f.Close()
+		}
 	} else {
-		os.WriteFile(path, data, FilePermission)
+		_ = os.WriteFile(path, data, FilePermission)
 	}
 }
 
@@ -368,8 +364,14 @@ func (s *Shell) handleExternal(cmd Command) {
 	if cmd.RedirectFile != "" {
 		if cmd.RedirectStderr {
 			execCmd.Stdout = os.Stdout
-			output, _ := execCmd.CombinedOutput()
-			s.writeToFile(cmd.RedirectFile, output, cmd.AppendMode)
+			if stderr, err := execCmd.StderrPipe(); err == nil {
+				if execCmd.Start() == nil {
+					if data, err := io.ReadAll(stderr); err == nil {
+						s.writeToFile(cmd.RedirectFile, data, cmd.AppendMode)
+					}
+					_ = execCmd.Wait()
+				}
+			}
 		} else {
 			execCmd.Stderr = os.Stderr
 			output, _ := execCmd.Output()

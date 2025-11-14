@@ -122,7 +122,7 @@ func (s *Shell) Do(line []rune, pos int) ([][]rune, int) {
 	fmt.Println()
 	fmt.Printf("$ %s", lineStr)
 
-	return [][]rune{line[:pos]}, len(lineStr)
+	return nil, len(lineStr)
 }
 
 func main() {

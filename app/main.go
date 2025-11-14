@@ -118,7 +118,27 @@ func (s *Shell) Do(line []rune, pos int) ([][]rune, int) {
 		return [][]rune{[]rune(suffix)}, len(lineStr)
 	}
 
-	// Multiple matches - print them and redisplay prompt
+	// Find longest common prefix
+	commonPrefix := matches[0]
+	for _, match := range matches[1:] {
+		for i := 0; i < len(commonPrefix) && i < len(match); i++ {
+			if commonPrefix[i] != match[i] {
+				commonPrefix = commonPrefix[:i]
+				break
+			}
+		}
+		if len(match) < len(commonPrefix) {
+			commonPrefix = match
+		}
+	}
+
+	// If common prefix is longer than what user typed, complete to it
+	if len(commonPrefix) > len(lineStr) {
+		suffix := commonPrefix[len(lineStr):]
+		return [][]rune{[]rune(suffix)}, len(lineStr)
+	}
+
+	// Otherwise show all matches
 	fmt.Println()
 	for i, match := range matches {
 		if i > 0 {

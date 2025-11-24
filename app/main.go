@@ -354,6 +354,12 @@ func (s *Shell) isInPath(command string) string {
 }
 
 func (s *Shell) handleExit(args []string) {
+	// Save history to HISTFILE if set
+	if histfile := os.Getenv("HISTFILE"); histfile != "" {
+		content := strings.Join(s.history, "\n") + "\n"
+		os.WriteFile(histfile, []byte(content), 0o644)
+	}
+
 	if len(args) == 0 {
 		os.Exit(0)
 		return

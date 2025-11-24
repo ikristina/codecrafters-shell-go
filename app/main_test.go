@@ -505,7 +505,7 @@ func TestShell_Do(t *testing.T) {
 			if len(result) != tc.expectedCount {
 				t.Errorf("expected %d results, got %d", tc.expectedCount, len(result))
 			}
-			if tc.expectedCount == 1 && string(result[0]) != tc.expectedSuffix {
+			if tc.expectedCount == 1 && len(result) > 0 && string(result[0]) != tc.expectedSuffix {
 				t.Errorf("expected suffix %q, got %q", tc.expectedSuffix, string(result[0]))
 			}
 		})

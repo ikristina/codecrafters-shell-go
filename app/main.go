@@ -26,9 +26,10 @@ const (
 
 // Shell represents a POSIX-compliant shell with readline support
 type Shell struct {
-	rl          *readline.Instance
-	allCommands []string
-	history     []string
+	rl                   *readline.Instance
+	allCommands          []string
+	history              []string
+	historyAppendedCount int
 }
 
 var builtinCommands = map[string]struct{}{
@@ -85,7 +86,10 @@ func NewShell() *Shell {
 	}
 	sort.Strings(allCommands)
 
-	shell := &Shell{allCommands: allCommands}
+	shell := &Shell{
+		allCommands: allCommands,
+		history:     []string{},
+	}
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          "$ ",
@@ -456,10 +460,14 @@ func (s *Shell) handleHistory(args []string, stdout io.Writer) {
 		}
 		defer f.Close()
 
-		content := strings.Join(s.history, "\n") + "\n"
-		if _, err := f.WriteString(content); err != nil {
-			fmt.Fprintf(stdout, "history: %s\n", err)
-			return
+		newLines := s.history[s.historyAppendedCount:]
+		if len(newLines) > 0 {
+			content := strings.Join(newLines, "\n") + "\n"
+			if _, err := f.WriteString(content); err != nil {
+				fmt.Fprintf(stdout, "history: %s\n", err)
+				return
+			}
+			s.historyAppendedCount = len(s.history)
 		}
 		return
 	}

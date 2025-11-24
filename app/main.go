@@ -44,6 +44,7 @@ type Command struct {
 	RedirectFile   string
 	RedirectStderr bool
 	AppendMode     bool
+	Next           *Command
 }
 
 // BellListener implements readline.Listener to ring a bell on TAB press
@@ -210,6 +211,9 @@ func (s *Shell) parseInput(input string) Command {
 			redirectFile := args[i+1]
 			args = append(args[:i], args[i+2:]...)
 			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:], RedirectFile: redirectFile, RedirectStderr: true, AppendMode: true}
+		case "|":
+			nextCmd := s.parseInput(strings.Join(args[i+1:], " "))
+			return Command{Name: strings.TrimSpace(args[0]), Args: args[1:i], Next: &nextCmd}
 		}
 	}
 
@@ -218,28 +222,48 @@ func (s *Shell) parseInput(input string) Command {
 
 func (s *Shell) executeCommand(commandLine string) error {
 	cmd := s.parseInput(commandLine)
+	return s.runCommand(cmd, os.Stdin, os.Stdout)
+}
+
+func (s *Shell) runCommand(cmd Command, stdin io.Reader, stdout io.Writer) error {
 	if cmd.Name == "" {
 		return nil
 	}
 
+	if cmd.Next != nil {
+		r, w, err := os.Pipe()
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			currentCmd := cmd
+			currentCmd.Next = nil
+			s.runCommand(currentCmd, stdin, w)
+			w.Close()
+		}()
+
+		return s.runCommand(*cmd.Next, r, stdout)
+	}
+
 	if !s.validateCommand(cmd.Name) {
-		fmt.Printf("%s: command not found\n", commandLine)
+		fmt.Printf("%s: command not found\n", cmd.Name)
 		return nil
 	}
 
 	switch cmd.Name {
 	case "exit":
-		s.handleExit(commandLine, cmd.Args)
+		s.handleExit(cmd.Args)
 	case "echo":
-		s.handleEcho(cmd)
+		s.handleEcho(cmd, stdout)
 	case "type":
-		s.handleType(cmd.Args)
+		s.handleType(cmd.Args, stdout)
 	case "pwd":
-		s.handlePwd()
+		s.handlePwd(stdout)
 	case "cd":
-		s.handleCd(cmd.Args)
+		s.handleCd(cmd.Args, os.Stderr)
 	default:
-		s.handleExternal(cmd)
+		s.handleExternal(cmd, stdin, stdout)
 	}
 	return nil
 }
@@ -307,20 +331,20 @@ func (s *Shell) isInPath(command string) string {
 	return ""
 }
 
-func (s *Shell) handleExit(commandLine string, args []string) {
+func (s *Shell) handleExit(args []string) {
 	if len(args) == 0 {
 		os.Exit(0)
 		return
 	}
 	v, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("incorrect command arguments: %s", commandLine)
+		fmt.Printf("incorrect command arguments")
 		return
 	}
 	os.Exit(v)
 }
 
-func (s *Shell) handleEcho(cmd Command) {
+func (s *Shell) handleEcho(cmd Command, stdout io.Writer) {
 	output := strings.Join(cmd.Args, " ") + "\n"
 	if cmd.RedirectFile != "" && !cmd.RedirectStderr {
 		s.writeToFile(cmd.RedirectFile, []byte(output), cmd.AppendMode)
@@ -328,7 +352,7 @@ func (s *Shell) handleEcho(cmd Command) {
 		if cmd.RedirectFile != "" {
 			s.writeToFile(cmd.RedirectFile, []byte(""), cmd.AppendMode)
 		}
-		fmt.Print(output)
+		fmt.Fprint(stdout, output)
 	}
 }
 
@@ -343,47 +367,48 @@ func (s *Shell) writeToFile(path string, data []byte, append bool) {
 	}
 }
 
-func (s *Shell) handleType(args []string) {
+func (s *Shell) handleType(args []string, stdout io.Writer) {
 	if len(args) == 0 {
-		fmt.Println("no command found")
+		fmt.Fprintln(stdout, "no command found")
 		return
 	}
 	commandName := args[0]
 	filePath := s.isInPath(commandName)
 	if _, ok := builtinCommands[commandName]; ok {
-		fmt.Printf("%s is a shell builtin\n", commandName)
+		fmt.Fprintf(stdout, "%s is a shell builtin\n", commandName)
 	} else if filePath != "" {
-		fmt.Printf("%[1]s is %[2]s\n", commandName, filePath)
+		fmt.Fprintf(stdout, "%[1]s is %[2]s\n", commandName, filePath)
 	} else {
-		fmt.Printf("%s: not found\n", commandName)
+		fmt.Fprintf(stdout, "%s: not found\n", commandName)
 	}
 }
 
-func (s *Shell) handlePwd() {
+func (s *Shell) handlePwd(stdout io.Writer) {
 	dir, err := os.Getwd()
 	if err == nil {
-		fmt.Printf("%s\n", dir)
+		fmt.Fprintf(stdout, "%s\n", dir)
 	} else {
-		fmt.Printf("error getting pwd %s\n", err)
+		fmt.Fprintf(stdout, "error getting pwd %s\n", err)
 	}
 }
 
-func (s *Shell) handleCd(args []string) {
+func (s *Shell) handleCd(args []string, stderr io.Writer) {
 	dir := os.Getenv("HOME")
 	if len(args) > 0 && args[0] != "~" {
 		dir = args[0]
 	}
 	if err := os.Chdir(dir); err != nil {
-		fmt.Printf("cd: %s: No such file or directory\n", dir)
+		fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", dir)
 	}
 }
 
-func (s *Shell) handleExternal(cmd Command) {
+func (s *Shell) handleExternal(cmd Command, stdin io.Reader, stdout io.Writer) {
 	execCmd := exec.Command(cmd.Name, cmd.Args...)
+	execCmd.Stdin = stdin
 
 	if cmd.RedirectFile != "" {
 		if cmd.RedirectStderr {
-			execCmd.Stdout = os.Stdout
+			execCmd.Stdout = stdout
 			if stderr, err := execCmd.StderrPipe(); err == nil {
 				if execCmd.Start() == nil {
 					if data, err := io.ReadAll(stderr); err == nil {
@@ -398,7 +423,8 @@ func (s *Shell) handleExternal(cmd Command) {
 			s.writeToFile(cmd.RedirectFile, output, cmd.AppendMode)
 		}
 	} else {
-		output, _ := execCmd.CombinedOutput()
-		fmt.Print(string(output))
+		execCmd.Stdout = stdout
+		execCmd.Stderr = os.Stderr
+		_ = execCmd.Run()
 	}
 }

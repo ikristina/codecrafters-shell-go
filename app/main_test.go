@@ -76,7 +76,6 @@ func TestShell_parseInput(t *testing.T) {
 					t.Errorf("expected arg[%d] %q, got %q", i, tc.expected.Args[i], arg)
 				}
 			}
-
 		})
 	}
 }
@@ -168,7 +167,7 @@ func TestShell_handleType(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			shell.handleType(tc.args)
+			shell.handleType(tc.args, w)
 
 			w.Close()
 			os.Stdout = old
@@ -210,7 +209,7 @@ func TestShell_handlePwd(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			shell.handlePwd()
+			shell.handlePwd(w)
 
 			w.Close()
 			os.Stdout = old
@@ -270,7 +269,7 @@ func TestShell_handleCd(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			shell.handleCd(tc.args)
+			shell.handleCd(tc.args, w)
 
 			w.Close()
 			os.Stdout = old
@@ -355,19 +354,27 @@ func TestShell_handleExternal(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
+			// Capture stdout and stderr
+			oldStdout := os.Stdout
+			oldStderr := os.Stderr
+			rOut, wOut, _ := os.Pipe()
+			rErr, wErr, _ := os.Pipe()
+			os.Stdout = wOut
+			os.Stderr = wErr
 
-			shell.handleExternal(tc.cmd)
+			shell.handleExternal(tc.cmd, strings.NewReader(""), wOut)
 
-			w.Close()
-			os.Stdout = old
+			wOut.Close()
+			wErr.Close()
+			os.Stdout = oldStdout
+			os.Stderr = oldStderr
 
-			var buf bytes.Buffer
-			io.Copy(&buf, r)
-			result := buf.String()
+			var bufOut bytes.Buffer
+			io.Copy(&bufOut, rOut)
+			var bufErr bytes.Buffer
+			io.Copy(&bufErr, rErr)
+
+			result := bufOut.String() + bufErr.String()
 
 			hasOutput := result != ""
 			if hasOutput != tc.expectOutput {

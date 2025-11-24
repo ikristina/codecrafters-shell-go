@@ -28,6 +28,7 @@ const (
 type Shell struct {
 	rl          *readline.Instance
 	allCommands []string
+	history     []string
 }
 
 var builtinCommands = map[string]struct{}{
@@ -170,6 +171,7 @@ func (s *Shell) Run() {
 			return
 		}
 
+		s.history = append(s.history, commandLine)
 		if err = s.executeCommand(commandLine); err != nil {
 			fmt.Println(err)
 			continue
@@ -406,6 +408,9 @@ func (s *Shell) handleCd(args []string, stderr io.Writer) {
 }
 
 func (s *Shell) handleHistory(stdout io.Writer) {
+	for i, cmd := range s.history {
+		fmt.Fprintf(stdout, "    %d  %s\n", i+1, cmd)
+	}
 }
 
 func (s *Shell) handleExternal(cmd Command, stdin io.Reader, stdout io.Writer) {

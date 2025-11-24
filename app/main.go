@@ -408,6 +408,26 @@ func (s *Shell) handleCd(args []string, stderr io.Writer) {
 }
 
 func (s *Shell) handleHistory(args []string, stdout io.Writer) {
+	if len(args) > 0 && args[0] == "-r" {
+		if len(args) < 2 {
+			fmt.Fprintln(stdout, "history: missing argument")
+			return
+		}
+		filePath := args[1]
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			fmt.Fprintf(stdout, "history: %s\n", err)
+			return
+		}
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			if line != "" {
+				s.history = append(s.history, line)
+			}
+		}
+		return
+	}
+
 	var num int
 	var err error
 	if len(args) > 0 {

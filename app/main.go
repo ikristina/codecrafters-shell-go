@@ -103,6 +103,19 @@ func NewShell() *Shell {
 	}
 
 	shell.rl = rl
+
+	// Load history from HISTFILE if set
+	if histfile := os.Getenv("HISTFILE"); histfile != "" {
+		if content, err := os.ReadFile(histfile); err == nil {
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				if line != "" {
+					shell.history = append(shell.history, line)
+				}
+			}
+		}
+	}
+
 	return shell
 }
 

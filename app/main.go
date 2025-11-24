@@ -428,6 +428,20 @@ func (s *Shell) handleHistory(args []string, stdout io.Writer) {
 		return
 	}
 
+	if len(args) > 0 && args[0] == "-w" {
+		if len(args) < 2 {
+			fmt.Fprintln(stdout, "history: missing argument")
+			return
+		}
+		filePath := args[1]
+		content := strings.Join(s.history, "\n")
+		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+			fmt.Fprintf(stdout, "history: %s\n", err)
+			return
+		}
+		return
+	}
+
 	var num int
 	var err error
 	if len(args) > 0 {

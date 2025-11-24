@@ -65,3 +65,30 @@ func TestShell_handleHistory_Read(t *testing.T) {
 		t.Errorf("expected history[2] to be 'file_cmd2', got %q", shell.history[2])
 	}
 }
+
+func TestShell_handleHistory_Write(t *testing.T) {
+	shell := NewShell()
+	shell.history = []string{"cmd1", "cmd2"}
+
+	// Create a temporary file
+	tmpfile, err := os.CreateTemp("", "history_write")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+	tmpfile.Close()
+
+	var buf bytes.Buffer
+	shell.handleHistory([]string{"-w", tmpfile.Name()}, &buf)
+
+	// Read file content
+	content, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "cmd1\ncmd2\n"
+	if string(content) != expected {
+		t.Errorf("expected file content %q, got %q", expected, string(content))
+	}
+}

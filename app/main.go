@@ -31,11 +31,12 @@ type Shell struct {
 }
 
 var builtinCommands = map[string]struct{}{
-	"type": {},
-	"echo": {},
-	"exit": {},
-	"pwd":  {},
-	"cd":   {},
+	"type":    {},
+	"echo":    {},
+	"exit":    {},
+	"pwd":     {},
+	"cd":      {},
+	"history": {},
 }
 
 type Command struct {
@@ -262,6 +263,8 @@ func (s *Shell) runCommand(cmd Command, stdin io.Reader, stdout io.Writer) error
 		s.handlePwd(stdout)
 	case "cd":
 		s.handleCd(cmd.Args, os.Stderr)
+	case "history":
+		s.handleHistory(stdout)
 	default:
 		s.handleExternal(cmd, stdin, stdout)
 	}
@@ -400,6 +403,9 @@ func (s *Shell) handleCd(args []string, stderr io.Writer) {
 	if err := os.Chdir(dir); err != nil {
 		fmt.Fprintf(stderr, "cd: %s: No such file or directory\n", dir)
 	}
+}
+
+func (s *Shell) handleHistory(stdout io.Writer) {
 }
 
 func (s *Shell) handleExternal(cmd Command, stdin io.Reader, stdout io.Writer) {

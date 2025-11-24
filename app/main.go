@@ -449,7 +449,7 @@ func (s *Shell) handleHistory(args []string, stdout io.Writer) {
 		}
 		filePath := args[1]
 		// append history to file
-		content := strings.Join(s.history, "\n")
+		content := strings.Join(s.history, "\n") + "\n"
 		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 			fmt.Fprintf(stdout, "history: %s\n", err)
 			return

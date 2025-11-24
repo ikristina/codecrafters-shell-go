@@ -266,7 +266,7 @@ func (s *Shell) runCommand(cmd Command, stdin io.Reader, stdout io.Writer) error
 	case "cd":
 		s.handleCd(cmd.Args, os.Stderr)
 	case "history":
-		s.handleHistory(stdout)
+		s.handleHistory(cmd.Args, stdout)
 	default:
 		s.handleExternal(cmd, stdin, stdout)
 	}
@@ -407,9 +407,23 @@ func (s *Shell) handleCd(args []string, stderr io.Writer) {
 	}
 }
 
-func (s *Shell) handleHistory(stdout io.Writer) {
-	for i, cmd := range s.history {
-		fmt.Fprintf(stdout, "    %d  %s\n", i+1, cmd)
+func (s *Shell) handleHistory(args []string, stdout io.Writer) {
+	var num int
+	var err error
+	if len(args) > 0 {
+		if num, err = strconv.Atoi(args[0]); err != nil {
+			fmt.Fprintln(stdout, "history: invalid number")
+			return
+		}
+	}
+
+	start := 0
+	if num > 0 && num < len(s.history) {
+		start = len(s.history) - num
+	}
+
+	for i := start; i < len(s.history); i++ {
+		fmt.Fprintf(stdout, "    %d  %s\n", i+1, s.history[i])
 	}
 }
 

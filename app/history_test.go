@@ -92,3 +92,35 @@ func TestShell_handleHistory_Write(t *testing.T) {
 		t.Errorf("expected file content %q, got %q", expected, string(content))
 	}
 }
+
+func TestShell_handleHistory_Append(t *testing.T) {
+	shell := NewShell()
+	shell.history = []string{"cmd3", "cmd4"}
+
+	// Create a temporary file with existing content
+	tmpfile, err := os.CreateTemp("", "history_append")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	initialContent := []byte("cmd1\ncmd2\n")
+	if _, err := tmpfile.Write(initialContent); err != nil {
+		t.Fatal(err)
+	}
+	tmpfile.Close()
+
+	var buf bytes.Buffer
+	shell.handleHistory([]string{"-a", tmpfile.Name()}, &buf)
+
+	// Read file content
+	content, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := "cmd1\ncmd2\ncmd3\ncmd4\n"
+	if string(content) != expected {
+		t.Errorf("expected file content %q, got %q", expected, string(content))
+	}
+}

@@ -449,8 +449,15 @@ func (s *Shell) handleHistory(args []string, stdout io.Writer) {
 		}
 		filePath := args[1]
 		// append history to file
+		f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(stdout, "history: %s\n", err)
+			return
+		}
+		defer f.Close()
+
 		content := strings.Join(s.history, "\n") + "\n"
-		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		if _, err := f.WriteString(content); err != nil {
 			fmt.Fprintf(stdout, "history: %s\n", err)
 			return
 		}

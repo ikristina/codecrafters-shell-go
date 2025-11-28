@@ -1,3 +1,4 @@
 shell
 *.exe
 *.out
+.vscode/

@@ -1,34 +1,98 @@
+# POSIX-Compliant Shell in Go
+
 [![progress-banner](https://backend.codecrafters.io/progress/shell/ae298821-1348-4caf-83c1-63ed1d5b8728)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
 
-This is a starting point for Go solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+A fully-featured POSIX-compliant shell built in Go, originally developed as part of the [CodeCrafters "Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
+## Features
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+- ✅ **Command Execution**: Run external programs and builtins
+- ✅ **Builtin Commands**: `cd`, `pwd`, `echo`, `type`, `exit`, `history`
+- ✅ **Pipes**: Chain commands with `|` operator
+- ✅ **I/O Redirection**: Support for `>`, `>>`, `2>`, `2>>`
+- ✅ **Command History**: Persistent history with `HISTFILE` support
+- ✅ **Quoting**: Handle single quotes, double quotes, and escape sequences
+- ✅ **Tab Completion**: Autocomplete commands from PATH
 
-# Passing the first stage
+## Project Structure
 
-The entry point for your `shell` implementation is in `app/main.go`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
-
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+```
+app/
+├── main.go          # Entry point
+├── shell.go         # Shell struct, REPL loop, autocomplete
+├── command.go       # Command parsing & execution
+├── builtins.go      # Builtin command handlers
+├── utils.go         # Helper functions & constants
+└── *_test.go        # Comprehensive test suite
 ```
 
-Time to move on to the next stage!
+## Getting Started
 
-# Stage 2 & beyond
+### Prerequisites
 
-Note: This section is for stages 2 and beyond.
+- Go 1.24 or higher
 
-1. Ensure you have `go (1.24)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `app/main.go`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+### Running the Shell
+
+```sh
+./your_program.sh
+```
+
+### Running Tests
+
+```sh
+go test ./app/...
+```
+
+### Testing with CodeCrafters
+
+```sh
+codecrafters test    # Run all stages
+codecrafters submit  # Submit your solution
+```
+
+## Usage Examples
+
+```sh
+# Basic commands
+$ pwd
+$ cd /tmp
+$ echo "Hello, World!"
+
+# Pipes
+$ echo "test" | cat | wc
+
+# I/O Redirection
+$ echo "log entry" >> log.txt
+$ cat nonexistent 2> error.log
+
+# History
+$ history
+$ history 10           # Show last 10 entries
+$ history -r ~/.history  # Read from file
+$ history -w ~/.history  # Write to file
+
+# With HISTFILE
+$ HISTFILE=~/.shell_history ./your_program.sh
+```
+
+## Development
+
+### Code Organization
+
+The codebase is split into focused modules:
+- **`shell.go`**: Core shell initialization, REPL, autocomplete
+- **`command.go`**: Parsing (quotes, pipes, redirects) & execution
+- **`builtins.go`**: All builtin command implementations
+- **`utils.go`**: Shared utilities and constants
+
+### Adding a New Builtin
+
+1. Add to `builtinCommands` map in `builtins.go`
+2. Implement `handle<Command>` function
+3. Add case in `runCommand` switch statement
+4. Write tests in `builtins_test.go`
+
+## Acknowledgments
+
+Built as part of the [CodeCrafters](https://codecrafters.io) "Build Your Own Shell" challenge.
